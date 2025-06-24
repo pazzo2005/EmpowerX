@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-
+import { loginUser, registerUser } from "@/api/auth";
 const Login = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -162,16 +162,24 @@ const Login = () => {
     };
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    
-    if (isLogin) {
-      if (email && password) {
+   // ✅ add this at top with imports
+
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault();
+
+  if (isLogin) {
+    if (email && password) {
+      try {
+        const res = await loginUser(email, password);
+        const { token, user } = res.data;
+
+        localStorage.setItem("token", token); // 💾 optional: store token
+
         toast({
           title: "Login Successful!",
-          description: `Welcome back to Y2Prove, ${userRole}!`,
+          description: `Welcome back, ${user.name || user.email}!`,
         });
-        
+
         switch (userRole) {
           case 'teacher':
             navigate('/team');
@@ -182,29 +190,48 @@ const Login = () => {
           default:
             navigate('/');
         }
-      } else {
+      } catch (err: any) {
         toast({
-          title: "Error",
-          description: "Please fill in all fields",
+          title: "Login Failed",
+          description: err.response?.data?.message || "Invalid credentials",
           variant: "destructive",
         });
       }
     } else {
-      if (name && email && password) {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
+    }
+  } else {
+    if (name && email && password) {
+      try {
+        await registerUser(name, email, password, userRole);
+
         toast({
           title: "Account Created!",
-          description: `Welcome to Y2Prove, ${name}! Your ${userRole} account is ready.`,
+          description: `Welcome to Y2Prove, ${name}!`,
         });
-        navigate('/');
-      } else {
+
+        setIsLogin(true); // 👈 switch to login mode after successful signup
+      } catch (err: any) {
         toast({
-          title: "Error",
-          description: "Please fill in all fields",
+          title: "Signup Failed",
+          description: err.response?.data?.message || "Something went wrong",
           variant: "destructive",
         });
       }
+    } else {
+      toast({
+        title: "Error",
+        description: "Please fill in all fields",
+        variant: "destructive",
+      });
     }
-  };
+  }
+};
+
 
   const getRoleTitle = () => {
     switch (userRole) {

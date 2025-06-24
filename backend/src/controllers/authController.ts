@@ -1,60 +1,105 @@
-import {Request ,Response} from 'express';
-import User,{IUser} from '../models/User';
+import { Request, Response, NextFunction } from 'express';
+import User from '../models/User';
+import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-dotenv.config();
-const generateToken = (user:IUser) => {
-    return jwt.sign(
-        {id:user._id,email:user.email,role:user.role},
-        process.enc.JWT_SECRET || 'supersecret',
-        {expiresln:'1d'}
+
+interface UserPayload {
+  id: string;
+  name: string;
+  email: string;
+}
+
+interface AuthResponse {
+  message: string;
+  token: string;
+  user: UserPayload;
+}
+
+export const signup = async (
+  req: Request,
+  res: Response<AuthResponse | { message: string }>,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { name, email, password } = req.body;
+    
+    if (!name || !email || !password) {
+      res.status(400).json({ message: 'All fields are required' });
+      return;
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) {
+      res.status(409).json({ message: 'User already exists' });
+      return;
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 12);
+    const newUser = new User({ name, email, password: hashedPassword });
+    await newUser.save();
+
+    // Type-safe _id access
+    const token = jwt.sign(
+      { id: newUser._id.toString() }, // Convert ObjectId to string
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1h' }
     );
+
+    res.status(201).json({
+      message: 'User registered successfully',
+      token,
+      user: {
+        id: newUser._id.toString(), // Convert ObjectId to string
+        name: newUser.name,
+        email: newUser.email
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 };
-export const signup = async (req:Request,res:Response) =>{
-    const{name,email.password,role} = req.body;
-    try{
-        const existingUser = await User.findOne({email});
-        if(existingUser){
-            return res.status(400).json({message:'User aready exists!'});
-        }
-        const newUser = new User({name,email,password,role});
-        await newUser.save();
-        const token = generateToken(newUser);
-        re.status(201).json({
-            message:'User created succesfully',
-            token,
-            user:{
-                id:newUser._id,
-                name:newUser.name,
-                email:newUser.email,
-                role:newUser.role,
-            },
-        });
-    }catch(error){
-        console.error('Signup error:',error);
-        res.status(500).json({message:'Server error during signup'});
+
+export const login = async (
+  req: Request,
+  res: Response<AuthResponse | { message: string }>,
+  next: NextFunction
+): Promise<void> => {
+  try {
+    const { email, password } = req.body;
+    
+    if (!email || !password) {
+      res.status(400).json({ message: 'Email and password are required' });
+      return;
     }
-};
-export const login = async(req:Request,res:response)=>{
-    const{email,password} = req.body;
-    try{
-        const user = await User.findOne({email});
-        if(!user) return res.status(401).json({message:'Invalid  email or password'});
-        const isMatch = await user.comparePassword(password);
-        if(!isMatch) return res.status(401).json({message:'Invalid email or password'});
-        const token  = generateToken(user);
-        res.status(200).json({
-            message:'Login successful',
-            token,
-            user:{
-                id:user_id,
-                name:user.name,
-                email:user.email,
-                role:user.role,
-            },
-        });
-    } catch (error){
-        console.error('login error',error);
-        res.status(500).json({message:'Server error during login'});
+
+    const user = await User.findOne({ email });
+    if (!user) {
+      res.status(401).json({ message: 'Invalid credentials' });
+      return;
     }
+
+    const isMatch = await bcrypt.compare(password, user.password);
+    if (!isMatch) {
+      res.status(401).json({ message: 'Invalid credentials' });
+      return;
+    }
+
+    const token = jwt.sign(
+      { id: user._id.toString() }, // Convert ObjectId to string
+      process.env.JWT_SECRET as string,
+      { expiresIn: '1h' }
+    );
+
+    res.status(200).json({
+      message: 'Login successful',
+      token,
+      user: {
+        id: user._id.toString(), // Convert ObjectId to string
+        name: user.name,
+        email: user.email
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
 };

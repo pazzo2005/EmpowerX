@@ -1,47 +1,25 @@
-import mongoose,{Schema,Document } from 'mongoose';
-import bcrypt from 'bcryptjs';
-export interface IUser extends Document {
-    name:string;
-    email:string;
-    password:string;
-    role:'student' | 'teacher' | 'admin';
-    comparePassword:(candidatePassword:string) => Promise<boolean>;
-}
-const userSchema:Schema<IUser> = new mongoose.Schema({
-    name:{
-        type:String,
-        required:[true,'Name is required'],
-    },
-    email:{
-        type:String,
-        required:[true,'Email is required'],
-        unique:true,
-        lowercase:true,
-    },
-    password:{
-        type : String,
-        enum:['student','teacher','admin'],
-        default:'student',
-    },
-    role :{
-        type:String,
-        enum:['student','teacher','admin'],
-        default:'student',
-    },
-},
-{
-    timestamps:true,
-}
-);
-userSchema.pre<IUser>('save',async function(next){
-    if(!this.isModified('password')) return next();
-    const salt= await bcrypt.genSalt(10);
-    this.password = await bcrypt.hash(this.password,salt);
-    next();
-});
- userSchema.methods.comparePassword = async function(candidatePassword:string):Promise<boolean>{
-    return bcrypt.compare(candidatePassword,this.password);
+import { Document, Schema, model, Types } from 'mongoose';
 
- };
- const User = mongoose.model<IUser>('User',userSchema);
- export default User;
+// Interface for User document
+export interface IUser extends Document {
+  _id: Types.ObjectId;  // Explicitly type the _id field
+  name: string;
+  email: string;
+  password: string;
+  createdAt?: Date;
+  updatedAt?: Date;
+}
+
+const userSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true },
+    email: { type: String, required: true, unique: true },
+    password: { type: String, required: true }
+  },
+  { timestamps: true }  // Adds createdAt and updatedAt automatically
+);
+
+// Create and export the model
+const User = model<IUser>('User', userSchema);
+
+export default User;
